@@ -1,0 +1,160 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.10;
+
+contract Voting {
+
+    // Enum to represent the status of the election
+    enum Status {
+        NOTSTARTED,
+        ONGOING,
+        COMPLETED
+    }
+
+    // Events for important contract actions
+    event ElectionStarted(string status);
+    event CandidateAdded(uint8 candidateId, string name, string electionPromise);
+    event VoterRegistered(address voterAddress, string name);
+    event VoteCast(address voterAddress, uint8 candidateId);
+    event DelegateVote(address from, address to);
+    event ElectionEnded(string winnerName, uint8 winnerId, uint8 winnerVotes);
+
+    // Struct to store candidate details
+    struct Candidate {
+        string name;
+        string electionPromise;
+        uint8 id;
+        uint8 votes;
+    }
+
+    // Struct to store voter details
+    struct Voter {
+        string name;
+        address voterAddress;
+        address delegateAddress;
+        uint8 candidateVotedId;
+        bool voted;
+    }
+
+    // State variables
+    address public owner;
+    mapping(uint8 => Candidate) public candidateDetailsList;
+    mapping(address => Voter) public votersList;
+    Status public electionStatus;
+    uint8 public candidatesCount;
+    uint8 public votersCount;
+    string public winnerCandidateName;
+    uint8 public winnerCandidateId;
+    uint8 public winnerCandidateVotesSecured;
+
+    // Constructor
+    constructor() {
+        owner = msg.sender;
+    }
+
+    // Modifier to restrict access to the owner
+    modifier onlyOwner() {
+        require(owner == msg.sender, "Only Owner has access for this functionality");
+        _;
+    }
+
+    // Owner functions
+    function addCandidate(string memory name, string memory electionPromise) public onlyOwner {
+       uint8 candidateId = candidatesCount + 1;
+        require(candidateDetailsList[candidateId].id == 0, "Candidate already registered");
+        require(electionStatus == Status.NOTSTARTED, "Election has On-going!");
+
+        candidateDetailsList[candidateId] = Candidate(name, electionPromise, candidateId, 0);
+        candidatesCount += 1;
+        emit CandidateAdded(candidateId, name, electionPromise);
+    }
+
+    function addVoter(string memory name, address _voterAddress) public onlyOwner {
+ require(votersList[_voterAddress].voterAddress == address(0), "Voter already registered");
+        require(electionStatus == Status.NOTSTARTED, "Election has On-going!");
+        votersList[_voterAddress] = Voter(name, _voterAddress, address(0), 0, false);
+        votersCount += 1;
+        emit VoterRegistered(_voterAddress, name);
+
+    }
+
+    function startElection() public onlyOwner {
+          require(electionStatus == Status.NOTSTARTED, "Election has already started");
+        electionStatus = Status.ONGOING;
+        emit ElectionStarted("election has started ");
+    }
+
+    function endElection() public onlyOwner {  require(electionStatus == Status.ONGOING, "Election has not On-going!");
+        for (uint8 i = 0; i < candidatesCount; i++) {
+            Candidate memory _candidate = candidateDetailsList[i + 1];
+            if (winnerCandidateVotesSecured < _candidate.votes) {
+                winnerCandidateName = _candidate.name;
+                winnerCandidateId = _candidate.id;
+                winnerCandidateVotesSecured = _candidate.votes;
+            }
+        }
+        electionStatus = Status.COMPLETED;
+        emit ElectionEnded(winnerCandidateName, winnerCandidateId, winnerCandidateVotesSecured);
+        
+    }
+
+    // Voter functions
+    function castVote(uint8 candidateId) public {
+         Voter storage _voter = votersList[msg.sender];
+        Candidate storage _candidate = candidateDetailsList[candidateId];
+        require(_voter.voterAddress == msg.sender, "Voter not yet registered");
+        require(_voter.delegateAddress == address(0), "You have delegated your voting rights already. You could not able to vote!");
+        require(!_voter.voted, "You have already voted and couldn't vote again!");
+        require(_candidate.id == candidateId, "You have entered the wrong Candidate Id");
+        require(electionStatus == Status.ONGOING, "Election has not On-going!");
+        _candidate.votes += 1;
+        _voter.candidateVotedId = candidateId;
+        _voter.voted = true;
+        emit VoteCast(msg.sender, candidateId);
+    }
+
+    function castDelegateVote(address actualVoterAddress, uint8 candidateId) public {
+ Voter storage _voter = votersList[actualVoterAddress];
+        Candidate storage _candidate = candidateDetailsList[candidateId];
+        require(_voter.voterAddress == msg.sender, "Voter not yet registered");
+        require(_voter.delegateAddress == address(0), "You have delegated your voting rights already. You could not able to vote!");
+        require(!_voter.voted, "You have already voted and couldn't vote again!");
+        require(_candidate.id == candidateId, "You have entered the wrong Candidate Id");
+        require(electionStatus == Status.ONGOING, "Election has not On-going!");
+        _candidate.votes += 1;
+        _voter.candidateVotedId = candidateId;
+        _voter.voted = true;
+        emit VoteCast(msg.sender, candidateId);
+    }
+
+    function delegateVotingRights(address delegateVoter) public onlyOwner {
+         Voter storage _voter = votersList[msg.sender];
+        require(_voter.voterAddress == msg.sender, "Voter not yet registered");
+        require(votersList[delegateVoter].voterAddress == delegateVoter, "Delegate voter not yet registered");
+        require(!_voter.voted, "Voter already voted, hence could not able to delegate!");
+        require(electionStatus == Status.ONGOING, "Election has not On-going!");
+        _voter.delegateAddress = delegateVoter;
+        emit DelegateVote(msg.sender, delegateVoter);
+    }
+
+    // View functions
+    function displayCandidateDetailsById(uint8 candidateId) public view returns (Candidate memory) {
+  require(candidateDetailsList[candidateId].id == candidateId, "Candidate Id not exists in the candidates list");
+        return candidateDetailsList[candidateId];
+    }
+
+    function showWinner() public view returns (string memory, uint8, uint8) {
+     require(electionStatus == Status.COMPLETED, "Election results not yet been announced!");
+        return (winnerCandidateName, winnerCandidateId, winnerCandidateVotesSecured);
+    }
+
+    function showElectionResultByCandidateId(uint8 id) public view returns (Candidate memory) {
+     require(electionStatus == Status.COMPLETED, "Election results not yet been announced!");
+        return displayCandidateDetailsById(id);
+    }
+
+    function viewVoterProfile(address voterAddress) public view returns (Voter memory) {
+     Voter memory _voter = votersList[voterAddress];
+        require(_voter.voterAddress != address(0), "Voter not yet registered");
+        return _voter;
+    }
+}
