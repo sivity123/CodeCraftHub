@@ -1,0 +1,132 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+contract JobRegistry {
+    struct Job {
+        uint jobId;
+        address jobProvider;
+        string jobTitle;
+        string jobDescription;
+        uint salary;
+        bool isOpen;
+        address hiredApplicant;
+    }
+
+    mapping(uint => Job) public jobs;
+    uint public jobCounter;
+
+    event JobAdded(uint indexed jobId, address indexed jobProvider, string jobTitle, uint salary, bool isOpen);
+    event JobClosed(uint indexed jobId);
+    event ApplicantHired(uint indexed jobId, address indexed worker);
+
+    modifier onlyJobProvider(uint _jobId) {
+        require(jobs[_jobId].jobProvider == msg.sender, "Not the job provider");
+        _;
+    }
+
+    modifier jobOpen(uint _jobId) {
+        require(jobs[_jobId].isOpen, "Job is not open");
+        _;
+    }
+
+    function addJob(string memory _jobTitle, string memory _jobDescription, uint _salary) public {
+        jobCounter++;
+        jobs[jobCounter] = Job(jobCounter, msg.sender, _jobTitle, _jobDescription, _salary, true, address(0));
+        emit JobAdded(jobCounter, msg.sender, _jobTitle, _salary, true);
+    }
+
+    function closeJob(uint _jobId) public onlyJobProvider(_jobId) jobOpen(_jobId) {
+        jobs[_jobId].isOpen = false;
+        emit JobClosed(_jobId);
+    }
+
+    function hireApplicant(uint _jobId, address _worker) public onlyJobProvider(_jobId) jobOpen(_jobId) {
+        require(jobs[_jobId].hiredApplicant == address(0), "Job already filled");
+        jobs[_jobId].hiredApplicant = _worker;
+        jobs[_jobId].isOpen = false;
+        emit ApplicantHired(_jobId, _worker);
+    }
+
+    function getJobDetails(uint _jobId) public view returns (Job memory) {
+        return jobs[_jobId];
+    }
+}
+
+contract ApplicantRegistry {
+    struct Applicant {
+        uint applicantId;
+        address worker;
+        string name;
+        string skills;
+        string laborHistory;
+        bool isAvailable;
+    }
+
+    mapping(uint => Applicant) public applicants;
+    uint public applicantCounter;
+
+    event ApplicantAdded(uint indexed applicantId, address indexed worker, string name, bool isAvailable);
+
+    modifier onlyApplicant(uint _applicantId) {
+        require(applicants[_applicantId].worker == msg.sender, "Not the applicant");
+        _;
+    }
+
+    modifier applicantAvailable(uint _applicantId) {
+        require(applicants[_applicantId].isAvailable, "Applicant not available");
+        _;
+    }
+
+    function addApplicant(string memory _name, string memory _skills, string memory _laborHistory) public {
+        applicantCounter++;
+        applicants[applicantCounter] = Applicant(applicantCounter, msg.sender, _name, _skills, _laborHistory, true);
+        emit ApplicantAdded(applicantCounter, msg.sender, _name, true);
+    }
+
+    function updateAvailability(uint _applicantId, bool _isAvailable) public onlyApplicant(_applicantId) {
+        applicants[_applicantId].isAvailable = _isAvailable;
+    }
+
+    function getApplicantDetails(uint _applicantId) public view returns (Applicant memory) {
+        return applicants[_applicantId];
+    }
+}
+
+contract RatingRegistry {
+    struct Rating {
+        uint ratingId;
+        address rater;
+        uint ratedEntityId; 
+        uint rating; 
+    }
+
+    mapping(uint => Rating) public ratings;
+    uint public ratingCounter;
+
+    event RatingProvided(uint indexed ratingId, address indexed rater, uint ratedEntityId, uint rating);
+
+    function provideRating(uint _ratedEntityId, uint _rating) public {
+        require(_rating >= 1 && _rating <= 5, "Rating must be between 1 and 5");
+        ratingCounter++;
+        ratings[ratingCounter] = Rating(ratingCounter, msg.sender, _ratedEntityId, _rating);
+        emit RatingProvided(ratingCounter, msg.sender, _ratedEntityId, _rating);
+    }
+
+    function getEntityRating(uint _ratedEntityId) public view returns (uint) {
+        uint totalRating = 0;
+        uint count = 0;
+
+        for (uint i = 1; i <= ratingCounter; i++) {
+            if (ratings[i].ratedEntityId == _ratedEntityId) {
+                totalRating += ratings[i].rating;
+                count++;
+            }
+        }
+
+        if (count > 0) {
+            return totalRating / count;
+        } else {
+            return 0; 
+        }
+    }
+}
